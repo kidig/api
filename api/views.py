@@ -115,8 +115,8 @@ class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
         else:
             try:
                 data = self.in_contract.check_and_return(data)
-            except t.DataError:
-                return RequestContractError()
+            except t.DataError as err:
+                return RequestContractError(json.dumps(err.as_dict()), content_type='application/json')
 
         response_data = self.handle(data)
 

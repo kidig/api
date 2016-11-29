@@ -1,5 +1,4 @@
 import json
-import io
 
 from django.test import TestCase
 
@@ -108,6 +107,8 @@ class ApiBasics(TestCase):
             'q': json.dumps({'foo': 'bar'})
         })
         self.assertEqual(response.status_code, 400)
+        self.assertDictEqual(json.loads(response.content.decode('utf-8')),
+                             {'foo': "value can't be converted to int"})
 
     def test_out_contract(self):
         response = self.client.get('/api/out_contract_view/', {
