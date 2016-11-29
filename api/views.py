@@ -141,4 +141,6 @@ class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
     def post(self, request):
         if self.method != Method.POST:
             return MethodNotAllowed(['POST'])
+        if 'json' in request.content_type:
+            return self._handle(request.body.decode('utf-8'))
         return self._handle(request.POST.get('q', '{}'))

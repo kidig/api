@@ -59,3 +59,11 @@ class ReturnStatusView(ApiView):
         if data['result'] == 'int':
             return 204
         return data
+
+
+class EchoView(ApiView):
+    method = Method.POST
+    in_contract = out_contract = t.Dict().allow_extra('*')
+
+    def handle(self, data):
+        return data

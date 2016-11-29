@@ -1,4 +1,5 @@
 import json
+import io
 
 from django.test import TestCase
 
@@ -129,3 +130,15 @@ class ApiBasics(TestCase):
             'q': json.dumps({'result': 'dict'})
         })
         self.assertEqual(response.status_code, 500)
+
+    def test_json_body(self):
+        data = {'foo': 'bar'}
+        response = self.client.post('/api/echo_view/', {
+            'q': json.dumps(data)
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertDictEqual(json.loads(response.content.decode('utf-8')), data)
+
+        response = self.client.post('/api/echo_view/', json.dumps(data), 'application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertDictEqual(json.loads(response.content.decode('utf-8')), data)
