@@ -8,6 +8,7 @@ from django.http import JsonResponse, HttpResponse
 from django.utils.module_loading import import_string
 from django.views import View
 
+from . import schema as s
 from .exceptions import ConfigurationError, MethodNotAllowed, RequestParseError, RequestContractError, \
     ResponseContractError
 
@@ -54,7 +55,8 @@ class ApiViewMeta(type):
                     raise ConfigurationError('{} must declare in_contract'.format(name))
                 elif attrs['in_contract'] is None:
                     pass
-                elif not isinstance(attrs['in_contract'], t.Trafaret):
+                elif not isinstance(attrs['in_contract'], t.Trafaret) \
+                        and not isinstance(attrs['in_contract'], s.Schema):
                     raise ConfigurationError('{} in_contract isn\'t trafaret.Trafaret instance')
 
             for base in bases:
@@ -65,7 +67,8 @@ class ApiViewMeta(type):
                     raise ConfigurationError('{} must declare out_contract'.format(name))
                 elif attrs['out_contract'] is None:
                     pass
-                elif not isinstance(attrs['out_contract'], t.Trafaret):
+                elif not isinstance(attrs['out_contract'], t.Trafaret) \
+                        and not isinstance(attrs['out_contract'], s.Schema):
                     raise ConfigurationError('{} out_contract isn\'t trafaret.Trafaret instance')
 
             for base in bases:
@@ -115,7 +118,7 @@ class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
         else:
             try:
                 data = self.in_contract.check_and_return(data)
-            except t.DataError as err:
+            except (t.DataError, s.DataError) as err:
                 return RequestContractError(json.dumps(err.as_dict()), content_type='application/json')
 
         response_data = self.handle(data)
@@ -128,7 +131,7 @@ class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
         else:
             try:
                 response_data = self.out_contract.check_and_return(response_data)
-            except t.DataError:
+            except (t.DataError, s.DataError):
                 return ResponseContractError()
 
             return JsonResponse(response_data, safe=False)

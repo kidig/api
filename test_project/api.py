@@ -1,5 +1,6 @@
 import trafaret as t
 
+import api.schema as s
 from api.router import Router
 from api.views import ApiView, Method
 
@@ -67,3 +68,21 @@ class EchoView(ApiView):
 
     def handle(self, data):
         return data
+
+
+nested = s.Definition('Nested', s.Object(
+    eggs=s.String()
+))
+
+
+class SchemaView(ApiView):
+    method = Method.POST
+    in_contract = s.Object(
+        foo=s.String(),
+        bar=s.Number(),
+        spam=nested
+    )
+    out_contract = None
+
+    def handle(self, data):
+        return 204

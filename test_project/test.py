@@ -2,6 +2,7 @@ import json
 
 from django.test import TestCase
 
+import api.schema as s
 from api.exceptions import ConfigurationError
 from api.views import ApiView, Method
 
@@ -143,3 +144,70 @@ class ApiBasics(TestCase):
         response = self.client.post('/api/echo_view/', json.dumps(data), 'application/json')
         self.assertEqual(response.status_code, 200)
         self.assertDictEqual(json.loads(response.content.decode('utf-8')), data)
+
+
+class SchemaViewTest(TestCase):
+    def test_in_schema(self):
+        response = self.client.post('/api/schema_view/', json.dumps({
+            'foo': '',
+            'bar': '',
+            'spam': {
+                'eggs': 1
+            }
+        }), content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(json.loads(response.content.decode('utf-8')),
+                         [{'path': ['bar'], 'error': "'' is not of type 'number'"},
+                          {'path': ['spam', 'eggs'], 'error': "1 is not of type 'string'"}])
+
+        response = self.client.post('/api/schema_view/', json.dumps({
+            'foo': '',
+            'bar': 1,
+            'spam': {
+                'eggs': ''
+            }
+        }), content_type='application/json')
+        self.assertEqual(response.status_code, 204)
+
+
+class SchemaTestCase(TestCase):
+    def test_schema(self):
+        child = s.Definition('TestChild', s.Object(
+            str=s.String()
+        ))
+        schema = s.Object(
+            str=s.String(),
+            number=s.Optional(s.Number()),
+            null=s.Null(),
+            boolean=s.Boolean(),
+            array=s.Array(s.String()),
+            child=child
+        )
+        data = {
+            'str': '',
+            'number': 1,
+            'null': None,
+            'boolean': True,
+            'array': [''],
+            'child': {
+                'str': ''
+            }
+        }
+        self.assertEqual(data, schema.check_and_return(data))
+
+        del data['number']
+        self.assertEqual(data, schema.check_and_return(data))
+
+        del data['boolean']
+        data['str'] = 1
+        with self.assertRaises(s.DataError) as ctx:
+            self.assertEqual(data, schema.check_and_return(data))
+        self.assertEqual(ctx.exception.as_dict(), [
+            {'path': [], 'error': "'boolean' is a required property"},
+            {'path': ['str'], 'error': "1 is not of type 'string'"}
+        ])
+
+    def test_duplicate(self):
+        s.Definition('Duplicate', s.String())
+        with self.assertRaises(ConfigurationError):
+            s.Definition('Duplicate', s.String())
