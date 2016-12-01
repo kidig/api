@@ -1,70 +1,100 @@
-import trafaret as t
-
 import api.schema as s
 from api.router import Router
+from api.spec import Spec, Response
 from api.views import ApiView, Method
 
 router = Router()
 
 
 class GetMethod(ApiView):
-    method = Method.GET
-    in_contract = None
-    out_contract = None
+    spec = Spec(
+        Method.GET,
+        s.Empty,
+        Response(204)
+    )
 
     def handle(self, data):
         return 204
 
 
 class PostMethod(ApiView):
-    method = Method.POST
-    in_contract = None
-    out_contract = None
+    spec = Spec(
+        Method.POST,
+        s.Empty,
+        Response(204)
+    )
 
     def handle(self, data):
         return 204
 
 
 class InContractView(ApiView):
-    method = Method.GET
-    in_contract = t.Dict({
-        t.Key('foo'): t.Int()
-    })
-    out_contract = None
+    spec = Spec(
+        Method.GET,
+        s.Object(
+            foo=s.Number()
+        ),
+        Response(204)
+    )
 
     def handle(self, data):
         return 204
 
 
 class OutContractView(ApiView):
-    method = Method.GET
-    in_contract = t.Dict({
-        t.Key('foo'): t.String()
-    })
-    out_contract = t.Dict({
-        t.Key('foo'): t.Int()
-    })
+    spec = Spec(
+        Method.GET,
+        s.Object(
+            foo=s.String()
+        ),
+        Response(200, s.Object(
+            foo=s.String()
+        ))
+    )
+
+    def handle(self, data):
+        return data
+
+
+class FailingOutContractView(ApiView):
+    spec = Spec(
+        Method.GET,
+        s.Empty,
+        Response(200, s.Object(
+            foo=s.String()
+        ))
+    )
 
     def handle(self, data):
         return data
 
 
 class ReturnStatusView(ApiView):
-    method = Method.GET
-    in_contract = t.Dict({
-        t.Key('result'): t.Enum('int', 'dict')
-    })
-    out_contract = None
+    spec = Spec(
+        Method.GET,
+        s.Object(
+            result=s.String()
+        ),
+        Response(204),
+        Response(200, s.Object(
+            result=s.String()
+        ))
+    )
 
     def handle(self, data):
         if data['result'] == 'int':
             return 204
+        elif data['result'] == 'fail':
+            return 201
         return data
 
 
 class EchoView(ApiView):
-    method = Method.POST
-    in_contract = out_contract = t.Dict().allow_extra('*')
+    spec = Spec(
+        Method.POST,
+        s.Object(),
+        Response(200, s.Object())
+    )
 
     def handle(self, data):
         return data
@@ -76,13 +106,17 @@ nested = s.Definition('Nested', s.Object(
 
 
 class SchemaView(ApiView):
-    method = Method.POST
-    in_contract = s.Object(
+    model = s.Object(
         foo=s.String(),
         bar=s.Number(),
         spam=nested
     )
-    out_contract = None
+
+    spec = Spec(
+        Method.POST,
+        model,
+        Response(200, s.Array(model))
+    )
 
     def handle(self, data):
-        return 204
+        return [data]

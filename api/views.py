@@ -1,8 +1,7 @@
 import json
+import logging
 from copy import copy
-from enum import Enum
 
-import trafaret as t
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from django.utils.module_loading import import_string
@@ -11,8 +10,11 @@ from django.views import View
 from . import schema as s
 from .exceptions import ConfigurationError, MethodNotAllowed, RequestParseError, RequestContractError, \
     ResponseContractError
+from .spec import Spec, Method
 
 __all__ = ('Method', 'ApiView',)
+
+logger = logging.getLogger(__name__)
 
 
 class StaticProperty(object):
@@ -21,11 +23,6 @@ class StaticProperty(object):
 
     def __get__(self, instance, owner):
         return self.getter()
-
-
-class Method(Enum):
-    GET = 'GET'
-    POST = 'POST'
 
 
 class ApiViewMeta(type):
@@ -39,37 +36,13 @@ class ApiViewMeta(type):
 
         if '__no_check__' not in attrs:
             for base in bases:
-                if hasattr(base, 'method'):
+                if hasattr(base, 'spec'):
                     break
             else:
-                if 'method' not in attrs:
-                    raise ConfigurationError('{} must declare method'.format(name))
-                elif not isinstance(attrs['method'], Method):
-                    raise ConfigurationError('{} method isn\'t api.views.Method enum'.format(name))
-
-            for base in bases:
-                if hasattr(base, 'in_contract'):
-                    break
-            else:
-                if 'in_contract' not in attrs:
-                    raise ConfigurationError('{} must declare in_contract'.format(name))
-                elif attrs['in_contract'] is None:
-                    pass
-                elif not isinstance(attrs['in_contract'], t.Trafaret) \
-                        and not isinstance(attrs['in_contract'], s.Schema):
-                    raise ConfigurationError('{} in_contract isn\'t trafaret.Trafaret instance')
-
-            for base in bases:
-                if hasattr(base, 'out_contract'):
-                    break
-            else:
-                if 'out_contract' not in attrs:
-                    raise ConfigurationError('{} must declare out_contract'.format(name))
-                elif attrs['out_contract'] is None:
-                    pass
-                elif not isinstance(attrs['out_contract'], t.Trafaret) \
-                        and not isinstance(attrs['out_contract'], s.Schema):
-                    raise ConfigurationError('{} out_contract isn\'t trafaret.Trafaret instance')
+                if 'spec' not in attrs:
+                    raise ConfigurationError('{} must declare spec'.format(name))
+                elif not isinstance(attrs['spec'], Spec):
+                    raise ConfigurationError('{} spec isn\'t api.spec.Spec instance')
 
             for base in bases:
                 if hasattr(base, 'handle'):
@@ -95,9 +68,7 @@ class ApiViewMeta(type):
 
 class ApiConfig:
     router = None
-    method = None
-    in_contract = None
-    out_contract = None
+    spec = None
 
     def handle(self, data):
         pass  # pragma: no cover
@@ -112,37 +83,42 @@ class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
         except json.JSONDecodeError:
             return RequestParseError()
 
-        if self.in_contract is None:
+        if self.spec.payload is s.Empty:
             if data:
                 return RequestContractError()
         else:
             try:
-                data = self.in_contract.check_and_return(data)
-            except (t.DataError, s.DataError) as err:
+                data = self.spec.payload.check_and_return(data)
+            except s.DataError as err:
                 return RequestContractError(json.dumps(err.as_dict()), content_type='application/json')
 
         response_data = self.handle(data)
 
-        if self.out_contract is None:
-            if isinstance(response_data, int):
-                return HttpResponse(status=response_data)
+        if isinstance(response_data, int):
+            for response in self.spec.responses:
+                if response.code == response_data and not response.schema:
+                    return HttpResponse(status=response_data)
             else:
+                logger.error('{} response is not declared for {}'.format(response_data, self.__class__.__name__))
                 return ResponseContractError()
         else:
-            try:
-                response_data = self.out_contract.check_and_return(response_data)
-            except (t.DataError, s.DataError):
-                return ResponseContractError()
+            for response in self.spec.responses:
+                if response.code == 200:
+                    try:
+                        response_data = response.schema.check_and_return(response_data)
+                    except s.DataError as err:
+                        logger.error('{} failed out contract validation {}'.format(self.__class__.__name__, err))
+                        return ResponseContractError()
 
-            return JsonResponse(response_data, safe=False)
+        return JsonResponse(response_data, safe=False)
 
     def get(self, request):
-        if self.method != Method.GET:
+        if self.spec.method != Method.GET:
             return MethodNotAllowed(['GET'])
         return self._handle(request.GET.get('q', '{}'))
 
     def post(self, request):
-        if self.method != Method.POST:
+        if self.spec.method != Method.POST:
             return MethodNotAllowed(['POST'])
         if 'json' in request.content_type:
             return self._handle(request.body.decode('utf-8'))

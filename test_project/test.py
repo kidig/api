@@ -4,57 +4,36 @@ from django.test import TestCase
 
 import api.schema as s
 from api.exceptions import ConfigurationError
+from api.spec import Spec, Response
 from api.views import ApiView, Method
 
 
 class ApiConfig(TestCase):
     def test_config_errors(self):
-        with self.assertRaisesRegex(ConfigurationError, r'method'):
+        with self.assertRaisesRegex(ConfigurationError, r'spec'):
             class Test1(ApiView):
                 pass
 
-        with self.assertRaisesRegex(ConfigurationError, r'method'):
+        with self.assertRaisesRegex(ConfigurationError, r'spec'):
             class Test2(ApiView):
-                method = 'GET'
+                spec = 123
 
-        with self.assertRaisesRegex(ConfigurationError, r'in_contract'):
+        with self.assertRaisesRegex(ConfigurationError, r'handle'):
             class Test3(ApiView):
-                method = Method.GET
+                spec = Spec(Method.GET, s.Empty)
 
-        with self.assertRaisesRegex(ConfigurationError, r'in_contract'):
+        with self.assertRaisesRegex(ConfigurationError, r'handle'):
             class Test4(ApiView):
-                method = Method.GET
-                in_contract = 'spam'
-
-        with self.assertRaisesRegex(ConfigurationError, r'out_contract'):
-            class Test5(ApiView):
-                method = Method.GET
-                in_contract = None
-
-        with self.assertRaisesRegex(ConfigurationError, r'out_contract'):
-            class Test6(ApiView):
-                method = Method.GET
-                in_contract = None
-                out_contract = 'spam'
-
-        with self.assertRaisesRegex(ConfigurationError, r'handle'):
-            class Test7(ApiView):
-                method = Method.GET
-                in_contract = None
-                out_contract = None
-
-        with self.assertRaisesRegex(ConfigurationError, r'handle'):
-            class Test8(ApiView):
-                method = Method.GET
-                in_contract = None
-                out_contract = None
-                handle = 'eggs'
+                spec = Spec(Method.GET, s.Empty)
+                handle = 123
 
     def test_inheritance(self):
         class Base(ApiView):
-            method = Method.GET
-            in_contract = None
-            out_contract = None
+            spec = Spec(
+                Method.GET,
+                s.Empty(),
+                Response(204)
+            )
 
             def handle(self, data):
                 pass  # pragma: no cover
@@ -102,14 +81,14 @@ class ApiBasics(TestCase):
         response = self.client.get('/api/in_contract_view/', {
             'q': json.dumps({'foo': '1'})
         })
-        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.status_code, 400)
 
         response = self.client.get('/api/in_contract_view/', {
             'q': json.dumps({'foo': 'bar'})
         })
         self.assertEqual(response.status_code, 400)
-        self.assertDictEqual(json.loads(response.content.decode('utf-8')),
-                             {'foo': "value can't be converted to int"})
+        self.assertEqual(json.loads(response.content.decode('utf-8')),
+                         [{'path': ['foo'], 'error': "'bar' is not of type 'number'"}])
 
     def test_out_contract(self):
         response = self.client.get('/api/out_contract_view/', {
@@ -117,9 +96,7 @@ class ApiBasics(TestCase):
         })
         self.assertEqual(response.status_code, 200)
 
-        response = self.client.get('/api/out_contract_view/', {
-            'q': json.dumps({'foo': 'bar'})
-        })
+        response = self.client.get('/api/failing_out_contract_view/')
         self.assertEqual(response.status_code, 500)
 
     def test_return_status(self):
@@ -131,7 +108,13 @@ class ApiBasics(TestCase):
         response = self.client.get('/api/return_status_view/', {
             'q': json.dumps({'result': 'dict'})
         })
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.get('/api/return_status_view/', {
+            'q': json.dumps({'result': 'fail'})
+        })
         self.assertEqual(response.status_code, 500)
+
 
     def test_json_body(self):
         data = {'foo': 'bar'}
@@ -167,7 +150,7 @@ class SchemaViewTest(TestCase):
                 'eggs': ''
             }
         }), content_type='application/json')
-        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.status_code, 200)
 
 
 class SchemaTestCase(TestCase):

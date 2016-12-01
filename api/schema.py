@@ -40,6 +40,17 @@ class Schema(metaclass=abc.ABCMeta):
         return instance
 
 
+class Empty(Schema):
+    def to_json(self):
+        raise RuntimeError('Empty is a special case and doesn\'t reflect to real jsonschema')  # pragma: no cover
+
+    def __call__(self, *args, **kwargs):
+        pass
+
+
+Empty = Empty()
+
+
 class Optional:
     def __init__(self, schema: Schema):
         self.schema = schema
