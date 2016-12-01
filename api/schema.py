@@ -132,11 +132,3 @@ def embed_definitions(data):
         data = dict(data)
         data[DEFINITIONS_PATH] = {d.name: d.schema.to_json() for d in definitions}
     return data
-
-
-tag = Definition('tag', String())
-
-user = Object(
-    name=String(),
-    tags=Array(tag)
-)
