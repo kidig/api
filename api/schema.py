@@ -52,8 +52,8 @@ class Empty(Schema):
     def to_json(self):
         raise RuntimeError('Empty is a special case and doesn\'t reflect to real jsonschema')  # pragma: no cover
 
-    def __call__(self, *args, **kwargs):
-        pass
+    def __call__(self):
+        return self
 
 
 Empty = Empty()
