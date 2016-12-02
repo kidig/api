@@ -72,7 +72,7 @@ class ApiViewMeta(type):
 
         cls = type.__new__(mcs, name, bases, attrs)
         if not cls.abstract:
-            cls.swagger_spec = SwaggerSpec(name, cls.spec)
+            cls.swagger_spec = SwaggerSpec(name, cls.spec, cls.__doc__)
         return cls
 
 
@@ -86,15 +86,12 @@ class ApiConfig:
 
 
 class SwaggerSpec:
-    def __init__(self, name: str, spec: Spec):
+    def __init__(self, name: str, spec: Spec, description: str = None):
         self.name = name
+        self.description = description or ''
         if self.name.lower().endswith('view'):
             self.name = self.name[:-4]
         self._spec = spec
-
-    @property
-    def description(self):
-        return self.__doc__ or ''
 
     @property
     def spec(self):
