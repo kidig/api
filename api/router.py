@@ -12,6 +12,11 @@ def snake_case(name):
 
 
 class Router:
+
+    def __init__(self, name='api', **kwargs):
+        self.name = name
+        self.namespace = kwargs.pop('namespace', None)
+
     def views(self):
         for view in ApiView.__subclasses__():
             if view.router == self and not view.abstract:
@@ -21,10 +26,11 @@ class Router:
     def urls(self):
         patterns = []
         for view in self.views():
+            name = snake_case(view.swagger_spec.name)
             patterns.append(
-                url('^{}/$'.format(snake_case(view.swagger_spec.name)), view.as_view()),
+                url('^{}/$'.format(snake_case(view.swagger_spec.name)), view.as_view(), name=name),
             )
-        return patterns, None, None
+        return patterns, self.name, self.namespace
 
     def swagger(self):
         data = {
