@@ -1,9 +1,8 @@
 import json
 import logging
-from copy import copy
 
 from django.conf import settings
-from django.http import JsonResponse, HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils.module_loading import import_string
 from django.views import View
 
@@ -34,7 +33,10 @@ class ApiViewMeta(type):
                 bases.append(base)
         bases = tuple(bases)
 
-        if '__no_check__' not in attrs:
+        if 'abstract' not in attrs:
+            attrs['abstract'] = False
+
+        if not attrs['abstract']:
             for base in bases:
                 if hasattr(base, 'spec'):
                     break
@@ -53,10 +55,6 @@ class ApiViewMeta(type):
                 elif not callable(attrs['handle']):
                     raise ConfigurationError('{} handle isn\'t callable'.format(name))
 
-        else:
-            attrs = copy(attrs)
-            del attrs['__no_check__']
-
         for base in bases:
             if hasattr(base, 'router'):
                 break
@@ -67,6 +65,7 @@ class ApiViewMeta(type):
 
 
 class ApiConfig:
+    abstract = False
     router = None
     spec = None
 
@@ -75,7 +74,7 @@ class ApiConfig:
 
 
 class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
-    __no_check__ = True
+    abstract = True
 
     def _handle(self, data: str):
         try:
@@ -92,25 +91,39 @@ class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
             except s.DataError as err:
                 return RequestContractError(json.dumps(err.as_dict()), content_type='application/json')
 
+        status_code = 200
         response_data = self.handle(data)
-
         if isinstance(response_data, int):
-            for response in self.spec.responses:
-                if response.code == response_data and not response.schema:
-                    return HttpResponse(status=response_data)
-            else:
-                logger.error('{} response is not declared for {}'.format(response_data, self.__class__.__name__))
-                return ResponseContractError()
-        else:
-            for response in self.spec.responses:
-                if response.code == 200:
-                    try:
-                        response_data = response.schema.check_and_return(response_data)
-                    except s.DataError as err:
-                        logger.error('{} failed out contract validation {}'.format(self.__class__.__name__, err))
-                        return ResponseContractError()
+            status_code = response_data
+            response_data = None
+        elif isinstance(response_data, tuple):
+            status_code, response_data = response_data
 
-        return JsonResponse(response_data, safe=False)
+        for response in self.spec.responses:
+            if response.code == status_code:
+                if response.schema and not response_data:
+                    logger.error('{} response with status {} requires data'.format(
+                        self.__class__.__name__, status_code))
+                    return ResponseContractError()
+                elif not response.schema and response_data:
+                    logger.error('{} response with status {} defines no data'.format(
+                        self.__class__.__name__, status_code))
+                    return ResponseContractError()
+                elif not response.schema and not response_data:
+                    return HttpResponse(status=status_code)
+
+                try:
+                    response_data = response.schema.check_and_return(response_data)
+                except s.DataError as err:
+                    logger.error('{} failed schema validation for response {}: {}'.format(
+                        self.__class__.__name__, status_code, err
+                    ))
+                    return ResponseContractError()
+
+                return JsonResponse(response_data, status=status_code, safe=False)
+
+        logger.error('{} defines no response with status {}'.format(self.__class__.__name__, status_code))
+        return ResponseContractError()
 
     def get(self, request):
         if self.spec.method != Method.GET:

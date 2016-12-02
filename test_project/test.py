@@ -96,7 +96,19 @@ class ApiBasics(TestCase):
         })
         self.assertEqual(response.status_code, 200)
 
-        response = self.client.get('/api/failing_out_contract_view/')
+        response = self.client.get('/api/failing_out_contract_view/', {
+            'q': json.dumps({
+                'result': False
+            })
+        })
+
+        self.assertEqual(response.status_code, 500)
+
+        response = self.client.get('/api/failing_out_contract_view/', {
+            'q': json.dumps({
+                'result': True
+            })
+        })
         self.assertEqual(response.status_code, 500)
 
     def test_return_status(self):
@@ -114,7 +126,6 @@ class ApiBasics(TestCase):
             'q': json.dumps({'result': 'fail'})
         })
         self.assertEqual(response.status_code, 500)
-
 
     def test_json_body(self):
         data = {'foo': 'bar'}
@@ -151,6 +162,17 @@ class SchemaViewTest(TestCase):
             }
         }), content_type='application/json')
         self.assertEqual(response.status_code, 200)
+
+    def test_unknown_response(self):
+        response = self.client.get('/api/unknown_response_view/', {
+            'q': json.dumps({'status': 200})
+        })
+        self.assertEqual(response.status_code, 500)
+
+        response = self.client.get('/api/unknown_response_view/', {
+            'q': json.dumps({'status': 204})
+        })
+        self.assertEqual(response.status_code, 500)
 
 
 class SchemaTestCase(TestCase):

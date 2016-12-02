@@ -59,14 +59,17 @@ class OutContractView(ApiView):
 class FailingOutContractView(ApiView):
     spec = Spec(
         Method.GET,
-        s.Empty,
+        s.Object(
+            result=s.Boolean()
+        ),
         Response(200, s.Object(
             foo=s.String()
         ))
     )
 
     def handle(self, data):
-        return data
+        if data['result']:
+            return {'foo': 1}
 
 
 class ReturnStatusView(ApiView):
@@ -120,3 +123,16 @@ class SchemaView(ApiView):
 
     def handle(self, data):
         return [data]
+
+
+class UnknownResponseView(ApiView):
+    spec = Spec(
+        Method.GET,
+        s.Object(
+            status=s.Number()
+        ),
+        Response(204)
+    )
+
+    def handle(self, data):
+        return data['status'], data
