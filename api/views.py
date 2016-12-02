@@ -1,5 +1,6 @@
 import json
 import logging
+import typing
 
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
@@ -16,12 +17,20 @@ __all__ = ('Method', 'ApiView',)
 logger = logging.getLogger(__name__)
 
 
-class StaticProperty(object):
+class StaticProperty:
     def __init__(self, getter):
         self.getter = getter
 
     def __get__(self, instance, owner):
         return self.getter()
+
+
+class ClassProperty:
+    def __init__(self, getter):
+        self.getter = getter
+
+    def __get__(self, instance, owner):
+        return self.getter(owner)
 
 
 class ApiViewMeta(type):
@@ -61,7 +70,10 @@ class ApiViewMeta(type):
         else:
             attrs['router'] = StaticProperty(lambda: import_string(settings.API_DEFAULT_ROUTER))
 
-        return type.__new__(mcs, name, bases, attrs)
+        cls = type.__new__(mcs, name, bases, attrs)
+        if not cls.abstract:
+            cls.swagger_spec = SwaggerSpec(name, cls.spec)
+        return cls
 
 
 class ApiConfig:
@@ -73,21 +85,74 @@ class ApiConfig:
         pass  # pragma: no cover
 
 
+class SwaggerSpec:
+    def __init__(self, name: str, spec: Spec):
+        self.name = name
+        if self.name.lower().endswith('view'):
+            self.name = self.name[:-4]
+        self._spec = spec
+
+    @property
+    def description(self):
+        return self.__doc__ or ''
+
+    @property
+    def spec(self):
+        data = {
+            'operationId': self.name,
+            'responses': {},
+            'description': self.description
+        }
+
+        if self._spec.payload and self._spec.payload is not s.Empty:
+            if self._spec.method is Method.POST:
+                data['parameters'] = [{
+                    'in': 'body',
+                    'name': 'body',
+                    'required': True,
+                    'schema': self._spec.payload.to_json()
+                }]
+            elif self._spec.method is Method.GET:
+                data['parameters'] = []
+                for name, schema in self._spec.payload.properties.items():
+                    required = True
+                    if isinstance(schema, s.Optional):
+                        required = False
+                        schema = schema.schema
+                    data['parameters'].append(dict(schema.to_json(), **{
+                        'in': 'query',
+                        'name': name,
+                        'required': required
+                    }))
+
+        for response in self._spec.responses:
+            data['responses'].update(response.swagger())
+
+        return {self._spec.method.value.lower(): data}
+
+
 class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
     abstract = True
 
-    def _handle(self, data: str):
-        try:
-            data = json.loads(data)
-        except json.JSONDecodeError:
-            return RequestParseError()
+    def _handle(self, data: typing.Optional[str]):
+        if not data:
+            data = None
 
-        if self.spec.payload is s.Empty:
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                return RequestParseError()
+
+        if not self.spec.payload or self.spec.payload is s.Empty:
             if data:
                 return RequestContractError()
         else:
             try:
-                data = self.spec.payload.check_and_return(data)
+                if self.spec.method is Method.GET:
+                    data = self.spec.payload.qs_check_and_return(data)
+                else:
+                    data = self.spec.payload.check_and_return(data)
             except s.DataError as err:
                 return RequestContractError(json.dumps(err.as_dict()), content_type='application/json')
 
@@ -128,7 +193,7 @@ class ApiView(View, ApiConfig, metaclass=ApiViewMeta):
     def get(self, request):
         if self.spec.method != Method.GET:
             return MethodNotAllowed(['GET'])
-        return self._handle(request.GET.get('q', '{}'))
+        return self._handle(request.GET)
 
     def post(self, request):
         if self.spec.method != Method.POST:

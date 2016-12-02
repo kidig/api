@@ -7,10 +7,12 @@ router = Router()
 
 
 class GetMethod(ApiView):
+    """sample view doc"""
+
     spec = Spec(
         Method.GET,
         s.Empty,
-        Response(204)
+        Response(204, description='okay')
     )
 
     def handle(self, data):
@@ -31,7 +33,7 @@ class PostMethod(ApiView):
 class InContractView(ApiView):
     spec = Spec(
         Method.GET,
-        s.Object(
+        s.Query(
             foo=s.Number()
         ),
         Response(204)
@@ -44,10 +46,10 @@ class InContractView(ApiView):
 class OutContractView(ApiView):
     spec = Spec(
         Method.GET,
-        s.Object(
+        s.Query(
             foo=s.String()
         ),
-        Response(200, s.Object(
+        Response(200, schema=s.Object(
             foo=s.String()
         ))
     )
@@ -59,27 +61,27 @@ class OutContractView(ApiView):
 class FailingOutContractView(ApiView):
     spec = Spec(
         Method.GET,
-        s.Object(
+        s.Query(
             result=s.Boolean()
         ),
-        Response(200, s.Object(
+        Response(200, schema=s.Object(
             foo=s.String()
         ))
     )
 
     def handle(self, data):
         if data['result']:
-            return {'foo': 1}
+            return {'foo': '1'}
 
 
 class ReturnStatusView(ApiView):
     spec = Spec(
         Method.GET,
-        s.Object(
+        s.Query(
             result=s.String()
         ),
         Response(204),
-        Response(200, s.Object(
+        Response(200, schema=s.Object(
             result=s.String()
         ))
     )
@@ -96,7 +98,7 @@ class EchoView(ApiView):
     spec = Spec(
         Method.POST,
         s.Object(),
-        Response(200, s.Object())
+        Response(200, schema=s.Object())
     )
 
     def handle(self, data):
@@ -118,7 +120,7 @@ class SchemaView(ApiView):
     spec = Spec(
         Method.POST,
         model,
-        Response(200, s.Array(model))
+        Response(200, schema=s.Array(model))
     )
 
     def handle(self, data):
@@ -128,7 +130,7 @@ class SchemaView(ApiView):
 class UnknownResponseView(ApiView):
     spec = Spec(
         Method.GET,
-        s.Object(
+        s.Query(
             status=s.Number()
         ),
         Response(204)
@@ -136,3 +138,14 @@ class UnknownResponseView(ApiView):
 
     def handle(self, data):
         return data['status'], data
+
+
+class ForbiddenView(ApiView):
+    spec = Spec(
+        Method.GET,
+        s.Empty,
+        Response(403)
+    )
+
+    def handle(self, data):
+        return 403

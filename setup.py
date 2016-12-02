@@ -10,8 +10,8 @@ setup(
     include_package_data=True,
     packages=find_packages(exclude=['test_project']),
     install_requires=[
-        'django >= 1.10',
-        'trafaret >= 0.7.5',
-        'jsonschema >= 2.5.1'
+        'Django >= 1.10',
+        'jsonschema >= 2.5.1',
+        'PyYAML >= 3.12'
     ]
 )
