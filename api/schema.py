@@ -118,6 +118,11 @@ class Number(Schema):
         return {'type': 'number'}
 
 
+class Integer(Schema):
+    def to_json(self):
+        return {'type': 'integer'}
+
+
 class String(Schema):
     def to_json(self):
         return {'type': 'string'}

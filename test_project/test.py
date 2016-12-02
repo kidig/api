@@ -183,6 +183,7 @@ class SchemaTestCase(TestCase):
         schema = s.Object(
             str=s.String(),
             number=s.Optional(s.Number()),
+            integer=s.Integer(),
             null=s.Null(),
             boolean=s.Boolean(),
             array=s.Array(s.String()),
@@ -190,7 +191,8 @@ class SchemaTestCase(TestCase):
         )
         data = {
             'str': '',
-            'number': 1,
+            'number': 1.2,
+            'integer': 2,
             'null': None,
             'boolean': True,
             'array': [''],
